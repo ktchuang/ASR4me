@@ -15,6 +15,7 @@ client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # ── Whisper ASR model ───────────────────────────────────────────────────────
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+WHISPER_LANG = os.getenv("WHISPER_LANG", "zh")  # Default: Traditional Chinese (Taiwan)
 print(f"Loading Whisper model '{WHISPER_MODEL}' …")
 whisper_model = whisper.load_model(WHISPER_MODEL)
 print("Whisper model loaded.")
@@ -61,7 +62,7 @@ def transcribe():
 
     try:
         # Step 1 – ASR with Whisper (local, free)
-        result = whisper_model.transcribe(tmp_path)
+        result = whisper_model.transcribe(tmp_path, language=WHISPER_LANG)
         txt_orig = result["text"].strip()
 
         if not txt_orig:
