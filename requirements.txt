@@ -1,6 +1,7 @@
 flask
 anthropic
 openai-whisper
+omnilingual-asr
 python-dotenv
 flask-login
 flask-sqlalchemy

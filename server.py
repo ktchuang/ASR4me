@@ -3,7 +3,6 @@ import subprocess
 import tempfile
 from datetime import datetime
 
-import whisper
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import (
@@ -53,14 +52,27 @@ def unauthorized():
     return redirect(url_for("login"))
 
 
-# ── Whisper ASR model ───────────────────────────────────────────────────────
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
-WHISPER_LANG = os.getenv("WHISPER_LANG", "zh")  # Default: Traditional Chinese (Taiwan)
-WHISPER_TEMPERATURE = float(os.getenv("WHISPER_TEMPERATURE", "0"))
-WHISPER_PROMPT = os.getenv("WHISPER_PROMPT", "")
-print(f"Loading Whisper model '{WHISPER_MODEL}' …")
-whisper_model = whisper.load_model(WHISPER_MODEL)
-print("Whisper model loaded.")
+# ── ASR provider ───────────────────────────────────────────────────────────
+ASR_PROVIDER = os.getenv("ASR_PROVIDER", "whisper").lower()
+
+if ASR_PROVIDER == "omnilingual":
+    from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
+
+    OMNILINGUAL_MODEL = os.getenv("OMNILINGUAL_MODEL", "omniASR_LLM_300M")
+    OMNILINGUAL_LANG = os.getenv("OMNILINGUAL_LANG", "cmn_Hant")
+    print(f"Loading Omnilingual ASR model '{OMNILINGUAL_MODEL}' …")
+    asr_pipeline = ASRInferencePipeline(model_card=OMNILINGUAL_MODEL)
+    print(f"Omnilingual ASR model loaded (lang={OMNILINGUAL_LANG}).")
+else:
+    import whisper
+
+    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+    WHISPER_LANG = os.getenv("WHISPER_LANG", "zh")
+    WHISPER_TEMPERATURE = float(os.getenv("WHISPER_TEMPERATURE", "0"))
+    WHISPER_PROMPT = os.getenv("WHISPER_PROMPT", "")
+    print(f"Loading Whisper model '{WHISPER_MODEL}' …")
+    whisper_model = whisper.load_model(WHISPER_MODEL)
+    print("Whisper model loaded.")
 
 # ── System prompt for text improvement ──────────────────────────────────────
 SYSTEM_PROMPT = """You are a professional text editor specializing in converting raw speech \
@@ -184,12 +196,18 @@ def transcribe():
         return jsonify({"error": f"Audio preprocessing failed: {exc}"}), 500
 
     try:
-        # Step 1 – ASR with Whisper (local, free)
-        transcribe_opts = {"language": WHISPER_LANG, "temperature": WHISPER_TEMPERATURE}
-        if WHISPER_PROMPT:
-            transcribe_opts["initial_prompt"] = WHISPER_PROMPT
-        result = whisper_model.transcribe(wav_path, **transcribe_opts)
-        txt_orig = result["text"].strip()
+        # Step 1 – ASR (local, free)
+        if ASR_PROVIDER == "omnilingual":
+            results = asr_pipeline.transcribe(
+                [wav_path], lang=[OMNILINGUAL_LANG], batch_size=1,
+            )
+            txt_orig = results[0].strip()
+        else:
+            transcribe_opts = {"language": WHISPER_LANG, "temperature": WHISPER_TEMPERATURE}
+            if WHISPER_PROMPT:
+                transcribe_opts["initial_prompt"] = WHISPER_PROMPT
+            result = whisper_model.transcribe(wav_path, **transcribe_opts)
+            txt_orig = result["text"].strip()
 
         if not txt_orig:
             return jsonify({"error": "No speech detected in the recording."}), 400
