@@ -83,17 +83,17 @@ Your task
 ---------
 1. Please keep the original language, tone, style, and level of formality of the speaker intact.
 2. Please keep the output is multi-lingual if the input is multi-lingual. Do NOT translate the text into a single language.
-3. If the transcription contains simplified chinese, please convert it to traditional chinese. If the transcription contains traditional chinese, please convert it to simplified chinese.
-3. Clean up the transcribed text while preserving the speaker's original meaning and intent.
-4. Fix grammar, punctuation, capitalization, and spelling.
-5. Remove speech artifacts: filler words (um, uh, like, you know, so, basically), \
+3. If the input contains simplified chinese, please convert it to traditional chinese. 
+4. Clean up the transcribed text while preserving the speaker's original meaning and intent.
+5. Fix grammar, punctuation, capitalization, and spelling.
+6. Remove speech artifacts: filler words (um, uh, like, you know, so, basically), \
 false starts, repeated words, and verbal pauses.
-6. Organize content into logical paragraphs.
-7. If the content contains enumerable items, format them as a numbered or bulleted list.
-8. If multiple distinct topics are discussed, add concise section headers (## Header).
-9. Maintain the speaker's original tone, style, and level of formality.
-10. Do NOT add, infer, or embellish information beyond what was spoken.
-11. Do NOT include any meta-commentary, explanations, or notes about your edits.
+7. Organize content into logical paragraphs.
+8. If the content contains enumerable items, format them as a numbered or bulleted list.
+9. If multiple distinct topics are discussed, add concise section headers (## Header).
+10. Maintain the speaker's original tone, style, and level of formality.
+11. Do NOT add, infer, or embellish information beyond what was spoken.
+12. Do NOT include any meta-commentary, explanations, or notes about your edits.
 
 Output ONLY the improved text."""
 
