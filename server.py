@@ -59,10 +59,11 @@ if ASR_PROVIDER == "omnilingual":
     from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 
     OMNILINGUAL_MODEL = os.getenv("OMNILINGUAL_MODEL", "omniASR_LLM_300M")
-    OMNILINGUAL_LANG = os.getenv("OMNILINGUAL_LANG", "cmn_Hant")
+    OMNILINGUAL_LANG = os.getenv("OMNILINGUAL_LANG", "").strip() or None
     print(f"Loading Omnilingual ASR model '{OMNILINGUAL_MODEL}' …")
     asr_pipeline = ASRInferencePipeline(model_card=OMNILINGUAL_MODEL)
-    print(f"Omnilingual ASR model loaded (lang={OMNILINGUAL_LANG}).")
+    lang_display = OMNILINGUAL_LANG or "auto-detect"
+    print(f"Omnilingual ASR model loaded (lang={lang_display}).")
 else:
     import whisper
 
@@ -198,8 +199,9 @@ def transcribe():
     try:
         # Step 1 – ASR (local, free)
         if ASR_PROVIDER == "omnilingual":
+            lang_arg = [OMNILINGUAL_LANG] if OMNILINGUAL_LANG else None
             results = asr_pipeline.transcribe(
-                [wav_path], lang=[OMNILINGUAL_LANG], batch_size=1,
+                [wav_path], lang=lang_arg, batch_size=1,
             )
             txt_orig = results[0].strip()
         else:
