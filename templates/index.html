@@ -104,13 +104,13 @@
     /* ── Results ──────────────────────────────────────────────────── */
     .results {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 1.5rem;
       width: 100%;
-      max-width: 960px;
+      max-width: 1400px;
       padding: 0 1rem 3rem;
     }
-    @media (max-width: 640px) {
+    @media (max-width: 900px) {
       .results { grid-template-columns: 1fr; }
     }
 
@@ -141,6 +141,13 @@
       content: "Waiting for recording…";
       color: #475569;
       font-style: italic;
+    }
+    .result-card .text-content.appended:empty::before {
+      content: "Accumulated text will appear here…";
+    }
+    .result-card .text-content.appended {
+      max-height: 400px;
+      overflow-y: auto;
     }
 
     /* ── Copy Button & Toast ─────────────────────────────────────── */
@@ -187,6 +194,10 @@
 </head>
 <body>
   <header>
+    <div style="display:flex; justify-content:flex-end; width:100%; max-width:960px; margin:0 auto; padding:0.5rem 1rem 0;">
+      <span style="color:#94a3b8; font-size:0.85rem; margin-right:0.75rem;">{{ current_user.username }}</span>
+      <a href="{{ url_for('logout') }}" style="color:#3b82f6; font-size:0.85rem; text-decoration:none;">Log out</a>
+    </div>
     <h1>ASR4me</h1>
     <p>Record your voice, get organized text — auto-copied to your clipboard.</p>
   </header>
@@ -219,6 +230,13 @@
         <button class="copy-btn" id="copyBtn" disabled>Copy to Clipboard</button>
       </div>
     </div>
+    <div class="result-card">
+      <h2>Appended Text</h2>
+      <div class="text-content appended" id="txtAppended" contenteditable="true"></div>
+      <div class="copy-bar">
+        <button class="copy-btn" id="copyAppendedBtn" disabled>Copy to Clipboard</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast notification -->
@@ -232,9 +250,11 @@
     const spinnerEl  = document.getElementById("spinner");
     const txtOrigEl  = document.getElementById("txtOrig");
     const txtImprEl  = document.getElementById("txtImproved");
-    const copyOrigBtn = document.getElementById("copyOrigBtn");
-    const copyBtn    = document.getElementById("copyBtn");
-    const toastEl    = document.getElementById("toast");
+    const copyOrigBtn     = document.getElementById("copyOrigBtn");
+    const copyBtn         = document.getElementById("copyBtn");
+    const txtAppendedEl   = document.getElementById("txtAppended");
+    const copyAppendedBtn = document.getElementById("copyAppendedBtn");
+    const toastEl         = document.getElementById("toast");
 
     let mediaRecorder = null;
     let audioChunks   = [];
@@ -296,6 +316,11 @@
       if (text) copyToClipboard(text);
     });
 
+    copyAppendedBtn.addEventListener("click", () => {
+      const text = txtAppendedEl.innerText;
+      if (text) copyToClipboard(text);
+    });
+
     // ── Recording logic ────────────────────────────────────────────
     recordBtn.addEventListener("click", async () => {
       if (!recording) {
@@ -345,6 +370,12 @@
 
       try {
         const res = await fetch("/transcribe", { method: "POST", body: formData });
+
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
         const data = await res.json();
 
         spinnerEl.classList.remove("visible");
@@ -360,6 +391,15 @@
         txtImprEl.textContent = data.txt_improved;
         copyOrigBtn.disabled = false;
         copyBtn.disabled = false;
+
+        // Append improved text to the accumulated panel
+        if (txtAppendedEl.innerText.trim()) {
+          txtAppendedEl.innerText += "\n" + data.txt_improved;
+        } else {
+          txtAppendedEl.innerText = data.txt_improved;
+        }
+        copyAppendedBtn.disabled = false;
+        txtAppendedEl.scrollTop = txtAppendedEl.scrollHeight;
 
         // Auto-copy improved text to clipboard
         await copyToClipboard(data.txt_improved);
