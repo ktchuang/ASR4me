@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASR4me — Voice to Text</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    header {
+      padding: 2rem 1rem 0.5rem;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    header p {
+      color: #94a3b8;
+      margin-top: 0.3rem;
+      font-size: 0.95rem;
+    }
+
+    /* ── Record Section ───────────────────────────────────────────── */
+    .record-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 2rem 0 1.5rem;
+    }
+
+    .record-btn {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      border: 4px solid #334155;
+      background: #1e293b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+    .record-btn:hover { border-color: #3b82f6; }
+    .record-btn .mic-icon {
+      width: 36px;
+      height: 36px;
+      fill: #94a3b8;
+      transition: fill 0.25s ease;
+    }
+    .record-btn.recording {
+      border-color: #ef4444;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .record-btn.recording .mic-icon { fill: #ef4444; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50%      { box-shadow: 0 0 0 18px rgba(239,68,68,0); }
+    }
+
+    .timer {
+      margin-top: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.2rem;
+      color: #64748b;
+    }
+    .timer.active { color: #ef4444; }
+
+    .status {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #64748b;
+      min-height: 1.4em;
+    }
+    .status.error { color: #f87171; }
+
+    /* ── Spinner ──────────────────────────────────────────────────── */
+    .spinner {
+      display: none;
+      margin-top: 1rem;
+      width: 36px;
+      height: 36px;
+      border: 4px solid #334155;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .spinner.visible { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ──────────────────────────────────────────────────── */
+    .results {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 960px;
+      padding: 0 1rem 3rem;
+    }
+    @media (max-width: 640px) {
+      .results { grid-template-columns: 1fr; }
+    }
+
+    .result-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .result-card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+    .result-card .text-content {
+      flex: 1;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      min-height: 120px;
+    }
+    .result-card .text-content:empty::before {
+      content: "Waiting for recording…";
+      color: #475569;
+      font-style: italic;
+    }
+
+    /* ── Copy Button & Toast ─────────────────────────────────────── */
+    .copy-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-top: 0.75rem;
+      gap: 0.5rem;
+    }
+    .copy-btn {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .copy-btn:hover { background: #2563eb; }
+    .copy-btn:disabled { opacity: 0.5; cursor: default; }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #22c55e;
+      color: #fff;
+      padding: 0.6rem 1.4rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      opacity: 0;
+      transition: all 0.35s ease;
+      pointer-events: none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ASR4me</h1>
+    <p>Record your voice, get organized text — auto-copied to your clipboard.</p>
+  </header>
+
+  <!-- Record controls -->
+  <div class="record-section">
+    <button class="record-btn" id="recordBtn" title="Click to start / stop recording">
+      <svg class="mic-icon" viewBox="0 0 24 24">
+        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z"/>
+      </svg>
+    </button>
+    <div class="timer" id="timer">00:00</div>
+    <div class="status" id="status">Click the mic to start recording</div>
+    <div class="spinner" id="spinner"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results">
+    <div class="result-card">
+      <h2>Original Transcription</h2>
+      <div class="text-content" id="txtOrig"></div>
+      <div class="copy-bar">
+        <button class="copy-btn" id="copyOrigBtn" disabled>Copy to Clipboard</button>
+      </div>
+    </div>
+    <div class="result-card">
+      <h2>Improved Text</h2>
+      <div class="text-content" id="txtImproved"></div>
+      <div class="copy-bar">
+        <button class="copy-btn" id="copyBtn" disabled>Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast">Copied to clipboard!</div>
+
+  <script>
+    // ── DOM refs ────────────────────────────────────────────────────
+    const recordBtn  = document.getElementById("recordBtn");
+    const timerEl    = document.getElementById("timer");
+    const statusEl   = document.getElementById("status");
+    const spinnerEl  = document.getElementById("spinner");
+    const txtOrigEl  = document.getElementById("txtOrig");
+    const txtImprEl  = document.getElementById("txtImproved");
+    const copyOrigBtn = document.getElementById("copyOrigBtn");
+    const copyBtn    = document.getElementById("copyBtn");
+    const toastEl    = document.getElementById("toast");
+
+    let mediaRecorder = null;
+    let audioChunks   = [];
+    let recording     = false;
+    let timerInterval = null;
+    let startTime     = 0;
+
+    // ── Timer helpers ──────────────────────────────────────────────
+    function resetTimer() {
+      clearInterval(timerInterval);
+      timerEl.textContent = "00:00";
+      timerEl.classList.remove("active");
+    }
+
+    function startTimer() {
+      startTime = Date.now();
+      timerEl.classList.add("active");
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+        const s = String(elapsed % 60).padStart(2, "0");
+        timerEl.textContent = `${m}:${s}`;
+      }, 250);
+    }
+
+    // ── Toast ──────────────────────────────────────────────────────
+    function showToast(msg) {
+      toastEl.textContent = msg || "Copied to clipboard!";
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2200);
+    }
+
+    // ── Copy to clipboard ──────────────────────────────────────────
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast();
+      } catch {
+        // Fallback for older browsers
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showToast();
+      }
+    }
+
+    copyOrigBtn.addEventListener("click", () => {
+      const text = txtOrigEl.textContent;
+      if (text) copyToClipboard(text);
+    });
+
+    copyBtn.addEventListener("click", () => {
+      const text = txtImprEl.textContent;
+      if (text) copyToClipboard(text);
+    });
+
+    // ── Recording logic ────────────────────────────────────────────
+    recordBtn.addEventListener("click", async () => {
+      if (!recording) {
+        // ── Start recording ──
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            // Stop all mic tracks
+            stream.getTracks().forEach(t => t.stop());
+
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            await sendAudio(audioBlob);
+          };
+
+          mediaRecorder.start();
+          recording = true;
+          recordBtn.classList.add("recording");
+          statusEl.textContent = "Recording… click again to stop";
+          statusEl.classList.remove("error");
+          startTimer();
+        } catch (err) {
+          statusEl.textContent = "Microphone access denied. Please allow mic access.";
+          statusEl.classList.add("error");
+        }
+      } else {
+        // ── Stop recording ──
+        mediaRecorder.stop();
+        recording = false;
+        recordBtn.classList.remove("recording");
+        resetTimer();
+        statusEl.textContent = "Processing…";
+        spinnerEl.classList.add("visible");
+      }
+    });
+
+    // ── Send audio to server ───────────────────────────────────────
+    async function sendAudio(blob) {
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+
+      try {
+        const res = await fetch("/transcribe", { method: "POST", body: formData });
+        const data = await res.json();
+
+        spinnerEl.classList.remove("visible");
+
+        if (!res.ok) {
+          statusEl.textContent = data.error || "Server error";
+          statusEl.classList.add("error");
+          return;
+        }
+
+        // Show results
+        txtOrigEl.textContent = data.txt_orig;
+        txtImprEl.textContent = data.txt_improved;
+        copyOrigBtn.disabled = false;
+        copyBtn.disabled = false;
+
+        // Auto-copy improved text to clipboard
+        await copyToClipboard(data.txt_improved);
+
+        statusEl.textContent = "Done — improved text auto-copied to clipboard!";
+        statusEl.classList.remove("error");
+      } catch (err) {
+        spinnerEl.classList.remove("visible");
+        statusEl.textContent = "Network error: " + err.message;
+        statusEl.classList.add("error");
+      }
+    }
+  </script>
+</body>
+</html>
