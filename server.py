@@ -44,12 +44,22 @@ class User(db.Model, UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
+    """Flask-Login callback: look up a User by their primary-key ID.
+
+    Called automatically on every request that requires authentication
+    to restore the logged-in user from the session cookie.
+    """
     return db.session.get(User, int(user_id))
 
 
 @login_manager.unauthorized_handler
 def unauthorized():
-    # Return JSON 401 for AJAX / API calls, HTML redirect for browser navigation
+    """Handle unauthenticated access attempts.
+
+    AJAX / API calls (detected by multipart/form-data content type) receive
+    a JSON 401 response so the frontend can redirect programmatically.
+    Normal browser navigation is redirected to the login page.
+    """
     if request.content_type and "multipart/form-data" in request.content_type:
         return jsonify({"error": "Authentication required"}), 401
     return redirect(url_for("login"))
@@ -105,12 +115,32 @@ else:
 
 
 def user_keywords_path(username: str) -> str:
-    """Return the path to a user's keywords file."""
+    """Return the filesystem path to a user's term-replacement CSV file.
+
+    The file lives at ``user_term/<username>_keywords.txt`` and is created
+    automatically when the user account is first provisioned via the
+    ``create-user`` CLI command.
+    """
     return os.path.join(USER_TERM_DIR, f"{username}_keywords.txt")
 
 
 def improve_text(raw_text: str, username: str) -> str:
-    """Send raw transcription to the configured LLM and return improved text."""
+    """Send raw ASR transcription to the configured LLM for cleanup, then
+    apply the user's personal term replacements.
+
+    Pipeline:
+        1. Send *raw_text* to Gemini or Claude (controlled by ``LLM_PROVIDER``)
+           along with the externalized system prompt (``SYSTEM_PROMPT``).
+        2. Apply per-user CSV term replacements from
+           ``user_term/<username>_keywords.txt`` to the LLM output.
+
+    Args:
+        raw_text: Unprocessed transcription text straight from the ASR model.
+        username: The logged-in user's name, used to locate their keywords file.
+
+    Returns:
+        The polished, term-replaced text ready for display and clipboard copy.
+    """
     if LLM_PROVIDER == "gemini":
         response = gemini_client.models.generate_content(
             model=GEMINI_MODEL_NAME,
@@ -133,6 +163,11 @@ def improve_text(raw_text: str, username: str) -> str:
 # ── Auth routes ─────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """Show the login form (GET) or authenticate credentials (POST).
+
+    On successful login the user is redirected to the ``next`` query-param
+    URL if present, otherwise to the main index page.
+    """
     if current_user.is_authenticated:
         return redirect(url_for("index"))
 
@@ -154,6 +189,7 @@ def login():
 @app.route("/logout")
 @login_required
 def logout():
+    """Log the current user out and redirect to the login page."""
     logout_user()
     return redirect(url_for("login"))
 
@@ -162,13 +198,19 @@ def logout():
 @app.route("/")
 @login_required
 def index():
+    """Serve the main recording / transcription UI."""
     return render_template("index.html")
 
 
 @app.route("/keywords", methods=["GET"])
 @login_required
 def get_keywords():
-    """Return the current user's keywords file content."""
+    """Return the current user's term-replacement CSV as a JSON string.
+
+    Response: ``{"content": "<file contents>"}``
+    Returns an empty string if the file does not exist yet.
+    Called by the frontend on page load to populate the Term Replacements panel.
+    """
     kw_path = user_keywords_path(current_user.username)
     if os.path.isfile(kw_path):
         with open(kw_path, encoding="utf-8") as f:
@@ -181,7 +223,12 @@ def get_keywords():
 @app.route("/keywords", methods=["POST"])
 @login_required
 def save_keywords():
-    """Save updated keywords content for the current user."""
+    """Persist the updated term-replacement CSV for the current user.
+
+    Expects JSON body: ``{"content": "<new file contents>"}``.
+    The ``user_term/`` directory is created if it does not already exist.
+    Called by the frontend Save button in the Term Replacements panel.
+    """
     data = request.get_json()
     if data is None or "content" not in data:
         return jsonify({"error": "No content provided"}), 400
@@ -197,6 +244,19 @@ def save_keywords():
 @app.route("/transcribe", methods=["POST"])
 @login_required
 def transcribe():
+    """Accept an uploaded audio recording and return transcribed + improved text.
+
+    Pipeline:
+        1. Save the uploaded WebM blob to a temp file.
+        2. Use ffmpeg to convert it to 16 kHz mono WAV (required by ASR models).
+        3. Run the configured ASR provider (Whisper or Omnilingual) to get
+           the raw transcription (``txt_orig``).
+        4. Pass the raw text through ``improve_text()`` which calls the LLM
+           and applies per-user term replacements (``txt_improved``).
+
+    Returns JSON: ``{"txt_orig": "...", "txt_improved": "..."}``.
+    Temp files are cleaned up in a ``finally`` block regardless of outcome.
+    """
     if "audio" not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
 
@@ -256,7 +316,15 @@ def transcribe():
 # ── CLI: create user ─────────────────────────────────────────────────────────
 @app.cli.command("create-user")
 def create_user_cmd():
-    """Create a new user account (interactive)."""
+    """Create a new user account interactively from the command line.
+
+    Prompts for username and password, validates both, inserts a new row
+    into the User table, and creates an empty per-user keywords file at
+    ``user_term/<username>_keywords.txt``.
+
+    Usage:
+        flask --app server create-user
+    """
     import getpass
 
     username = input("Username (min 3 chars): ").strip()

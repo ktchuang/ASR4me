@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Replace keywords in text based on a CSV mapping file."""
+"""Replace keywords in text based on a CSV mapping file.
+
+This module provides both an importable function (``apply_replacements``)
+and a CLI entry point.  It is used by server.py to post-process LLM output
+with per-user term replacements, and can also be invoked standalone:
+
+    python term_replace.py keywords.txt "some text to process"
+
+CSV format (one replacement per line):
+    original_keyword,replacement_keyword
+"""
 
 import argparse
 import csv
@@ -7,9 +17,23 @@ import os
 
 
 def apply_replacements(keywords_file: str, text: str) -> str:
-    """Read a CSV mapping file and apply all replacements to *text*.
+    """Apply all keyword replacements defined in *keywords_file* to *text*.
 
-    If the keywords file does not exist or is empty, returns *text* unchanged.
+    Each line in the CSV file maps an original term to its replacement::
+
+        人工智慧,人工智能
+        OpenAi,OpenAI
+
+    Replacements are applied sequentially in file order using simple string
+    substitution, so earlier replacements may affect later ones.
+
+    Args:
+        keywords_file: Path to a CSV file with ``orig,new`` rows.
+        text: The input text to transform.
+
+    Returns:
+        The text after all replacements.  If *keywords_file* does not exist
+        or contains no valid rows, *text* is returned unchanged.
     """
     if not os.path.isfile(keywords_file):
         return text
@@ -26,7 +50,16 @@ def apply_replacements(keywords_file: str, text: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Replace keywords in text using a CSV mapping file.")
+    """CLI entry point: read a keywords CSV and apply replacements to text.
+
+    Usage:
+        python term_replace.py <keywords_file> <orig_content>
+
+    Prints the transformed text to stdout.
+    """
+    parser = argparse.ArgumentParser(
+        description="Replace keywords in text using a CSV mapping file.",
+    )
     parser.add_argument("keywords_file", help="CSV file with orig_keyword,new_keyword per line")
     parser.add_argument("orig_content", help="Text to perform replacements on")
     args = parser.parse_args()
