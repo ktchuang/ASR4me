@@ -5,4 +5,4 @@ omnilingual-asr
 python-dotenv
 flask-login
 flask-sqlalchemy
-google-generativeai
+google-genai

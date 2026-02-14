@@ -186,14 +186,58 @@ Open the browser, enter your credentials, and you'll see the recording interface
 4. Wait a few seconds while the audio is transcribed and improved.
 5. The improved text is **auto-copied** to your clipboard. Paste it with `Cmd + V` (Mac) or `Ctrl + V` (Windows/Linux).
 
+## System Prompts
+
+The system prompt that guides the LLM text improvement is loaded from an external text file, making it easy to customize for different LLM models or use cases.
+
+| Setting | Default | Description |
+|---|---|---|
+| `SYSTEM_PROMPT_FILE` | `prompts/default.txt` | Path to the prompt file |
+
+The `prompts/` directory ships with a default prompt. To customize:
+
+1. Copy an existing prompt file:
+   ```bash
+   cp prompts/default.txt prompts/my-custom-prompt.txt
+   ```
+2. Edit the new file to suit your needs.
+3. Point to it in `.env`:
+   ```bash
+   SYSTEM_PROMPT_FILE=prompts/my-custom-prompt.txt
+   ```
+
+> **Tip:** Different LLM models may respond better to different prompt styles. Create a prompt file per model (e.g., `prompts/gemini-2.0-flash.txt`, `prompts/claude-sonnet.txt`) and switch via `SYSTEM_PROMPT_FILE` when changing `LLM_PROVIDER`.
+
+## Per-User Term Replacements
+
+Each user has a personal **Term Replacements** panel on the web UI. This allows post-processing of the LLM output to fix recurring terminology — for example, replacing simplified Chinese terms with traditional Chinese equivalents, or standardizing proper nouns.
+
+- Replacement files are stored in `user_term/<username>_keywords.txt`.
+- An empty file is created automatically when a user account is created.
+- The file uses CSV format — one replacement per line: `original,replacement`.
+- Replacements are applied **after** the LLM improvement step, before the final text is returned.
+- Users can edit and save their replacements directly from the web UI (no server restart needed).
+
+Example `user_term/alice_keywords.txt`:
+```
+人工智慧,人工智能
+machine learning,機器學習
+OpenAi,OpenAI
+```
+
 ## Project Structure
 
 ```
 ASR4me/
 ├── server.py            # Flask backend (auth, ASR, LLM text improvement)
+├── term_replace.py      # CSV-based keyword replacement utility
 ├── templates/
-│   ├── index.html       # Recording UI (clipboard copy, appended text, logout)
+│   ├── index.html       # Recording UI (clipboard copy, appended text, term editor)
 │   └── login.html       # Login page
+├── prompts/
+│   └── default.txt      # Default system prompt (configurable via SYSTEM_PROMPT_FILE)
+├── user_term/           # Per-user keyword replacement files (auto-created)
+│   └── .gitkeep
 ├── requirements.txt     # Python dependencies
 ├── .env.example         # Environment variable template
 └── README.md            # This file
