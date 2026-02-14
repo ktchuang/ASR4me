@@ -16,11 +16,14 @@ from flask_login import (
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from term_replace import apply_replacements
+
 load_dotenv()
 
 # ── App config ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
+USER_TERM_DIR = os.path.join(basedir, "user_term")
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "asr4me.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -82,18 +85,19 @@ transcriptions into polished, well-organized written text.
 Your task
 ---------
 1. Please keep the original language, tone, style, and level of formality of the speaker intact.
-2. Please keep the output is multi-lingual if the input is multi-lingual. Do NOT translate the text into a single language.
-3. If the input contains simplified chinese, please convert it to traditional chinese. 
-4. Clean up the transcribed text while preserving the speaker's original meaning and intent.
-5. Fix grammar, punctuation, capitalization, and spelling.
-6. Remove speech artifacts: filler words (um, uh, like, you know, so, basically), \
+2. Try to check if the input text is understandable and coherent. If not, make default to think the input is a transcription from Taiwanese Hokkien (台語). Convert it to traditional chinese while preserving the original meaning as much as possible.
+3. Please keep the output is multi-lingual if the input is multi-lingual. Do NOT translate the text into a single language.
+4. If the input contains simplified chinese, please convert it to traditional chinese. 
+5. Clean up the transcribed text while preserving the speaker's original meaning and intent.
+6. Fix grammar, punctuation, capitalization, and spelling.
+7. Remove speech artifacts: filler words (um, uh, like, you know, so, basically), \
 false starts, repeated words, and verbal pauses.
-7. Organize content into logical paragraphs.
-8. If the content contains enumerable items, format them as a numbered or bulleted list.
-9. If multiple distinct topics are discussed, add concise section headers (## Header).
-10. Maintain the speaker's original tone, style, and level of formality.
-11. Do NOT add, infer, or embellish information beyond what was spoken.
-12. Do NOT include any meta-commentary, explanations, or notes about your edits.
+8. Organize content into logical paragraphs.
+9. If the content contains enumerable items, format them as a numbered or bulleted list.
+10. If multiple distinct topics are discussed, add concise section headers (## Header).
+11. Maintain the speaker's original tone, style, and level of formality.
+12. Do NOT add, infer, or embellish information beyond what was spoken.
+13. Do NOT include any meta-commentary, explanations, or notes about your edits.
 
 Output ONLY the improved text."""
 
@@ -116,11 +120,16 @@ else:
     print("LLM provider: Claude (claude-sonnet-4-5-20250929)")
 
 
-def improve_text(raw_text: str) -> str:
+def user_keywords_path(username: str) -> str:
+    """Return the path to a user's keywords file."""
+    return os.path.join(USER_TERM_DIR, f"{username}_keywords.txt")
+
+
+def improve_text(raw_text: str, username: str) -> str:
     """Send raw transcription to the configured LLM and return improved text."""
     if LLM_PROVIDER == "gemini":
         response = gemini_model.generate_content(raw_text)
-        return response.text
+        llm_output = response.text
     else:
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
@@ -128,7 +137,9 @@ def improve_text(raw_text: str) -> str:
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": raw_text}],
         )
-        return response.content[0].text
+        llm_output = response.content[0].text
+
+    return apply_replacements(user_keywords_path(username), llm_output)
 
 
 # ── Auth routes ─────────────────────────────────────────────────────────────
@@ -164,6 +175,35 @@ def logout():
 @login_required
 def index():
     return render_template("index.html")
+
+
+@app.route("/keywords", methods=["GET"])
+@login_required
+def get_keywords():
+    """Return the current user's keywords file content."""
+    kw_path = user_keywords_path(current_user.username)
+    if os.path.isfile(kw_path):
+        with open(kw_path, encoding="utf-8") as f:
+            content = f.read()
+    else:
+        content = ""
+    return jsonify({"content": content})
+
+
+@app.route("/keywords", methods=["POST"])
+@login_required
+def save_keywords():
+    """Save updated keywords content for the current user."""
+    data = request.get_json()
+    if data is None or "content" not in data:
+        return jsonify({"error": "No content provided"}), 400
+
+    os.makedirs(USER_TERM_DIR, exist_ok=True)
+    kw_path = user_keywords_path(current_user.username)
+    with open(kw_path, "w", encoding="utf-8") as f:
+        f.write(data["content"])
+
+    return jsonify({"ok": True})
 
 
 @app.route("/transcribe", methods=["POST"])
@@ -216,7 +256,7 @@ def transcribe():
             return jsonify({"error": "No speech detected in the recording."}), 400
 
         # Step 2 – Improve / reorganize text with LLM
-        txt_improved = improve_text(txt_orig)
+        txt_improved = improve_text(txt_orig, current_user.username)
 
         return jsonify({"txt_orig": txt_orig, "txt_improved": txt_improved})
 
@@ -256,7 +296,12 @@ def create_user_cmd():
     )
     db.session.add(user)
     db.session.commit()
+
+    os.makedirs(USER_TERM_DIR, exist_ok=True)
+    kw_path = user_keywords_path(username)
+    open(kw_path, "a", encoding="utf-8").close()
     print(f"User '{username}' created successfully.")
+    print(f"Keywords file created: {kw_path}")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────

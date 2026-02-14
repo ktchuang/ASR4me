@@ -190,6 +190,75 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* ── Keywords Panel ──────────────────────────────────────────── */
+    .keywords-panel {
+      width: 100%;
+      max-width: 1400px;
+      padding: 0 1rem 3rem;
+    }
+    .keywords-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .keywords-card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+    .keywords-card .hint {
+      font-size: 0.8rem;
+      color: #475569;
+      margin-bottom: 0.75rem;
+    }
+    .keywords-card textarea {
+      width: 100%;
+      min-height: 120px;
+      background: #0f172a;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      resize: vertical;
+    }
+    .keywords-card textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .keywords-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-top: 0.75rem;
+      gap: 0.75rem;
+    }
+    .keywords-bar .save-status {
+      font-size: 0.82rem;
+      color: #64748b;
+    }
+    .save-btn {
+      background: #334155;
+      color: #64748b;
+      border: none;
+      border-radius: 6px;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.82rem;
+      cursor: default;
+      transition: background 0.2s, color 0.2s;
+    }
+    .save-btn.active {
+      background: #3b82f6;
+      color: #fff;
+      cursor: pointer;
+    }
+    .save-btn.active:hover { background: #2563eb; }
   </style>
 </head>
 <body>
@@ -235,6 +304,19 @@
       <div class="text-content appended" id="txtAppended" contenteditable="true"></div>
       <div class="copy-bar">
         <button class="copy-btn" id="copyAppendedBtn" disabled>Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keywords editor -->
+  <div class="keywords-panel">
+    <div class="keywords-card">
+      <h2>Term Replacements</h2>
+      <p class="hint">One replacement per line: original,replacement (CSV format). Applied after LLM improvement.</p>
+      <textarea id="keywordsArea" spellcheck="false" placeholder="e.g.&#10;人工智慧,人工智能&#10;machine learning,機器學習"></textarea>
+      <div class="keywords-bar">
+        <span class="save-status" id="saveStatus"></span>
+        <button class="save-btn" id="saveKeywordsBtn">Save</button>
       </div>
     </div>
   </div>
@@ -320,6 +402,51 @@
       const text = txtAppendedEl.innerText;
       if (text) copyToClipboard(text);
     });
+
+    // ── Keywords editor ──────────────────────────────────────────────
+    const keywordsArea    = document.getElementById("keywordsArea");
+    const saveKeywordsBtn = document.getElementById("saveKeywordsBtn");
+    const saveStatusEl    = document.getElementById("saveStatus");
+    let savedKeywords     = "";
+
+    async function loadKeywords() {
+      try {
+        const res = await fetch("/keywords");
+        if (res.ok) {
+          const data = await res.json();
+          keywordsArea.value = data.content;
+          savedKeywords = data.content;
+        }
+      } catch {}
+    }
+
+    keywordsArea.addEventListener("input", () => {
+      const changed = keywordsArea.value !== savedKeywords;
+      saveKeywordsBtn.classList.toggle("active", changed);
+      if (changed) saveStatusEl.textContent = "";
+    });
+
+    saveKeywordsBtn.addEventListener("click", async () => {
+      if (!saveKeywordsBtn.classList.contains("active")) return;
+      try {
+        const res = await fetch("/keywords", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: keywordsArea.value }),
+        });
+        if (res.ok) {
+          savedKeywords = keywordsArea.value;
+          saveKeywordsBtn.classList.remove("active");
+          saveStatusEl.textContent = "Saved";
+        } else {
+          saveStatusEl.textContent = "Save failed";
+        }
+      } catch {
+        saveStatusEl.textContent = "Network error";
+      }
+    });
+
+    loadKeywords();
 
     // ── Recording logic ────────────────────────────────────────────
     recordBtn.addEventListener("click", async () => {
