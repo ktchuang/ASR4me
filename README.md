@@ -206,6 +206,8 @@ The `prompts/` directory ships with a default prompt. To customize:
    SYSTEM_PROMPT_FILE=prompts/my-custom-prompt.txt
    ```
 
+> **Recommended:** `prompts/gemini-2.0-flash-v2.txt` is the recommended system prompt for Gemini. Set `SYSTEM_PROMPT_FILE=prompts/gemini-2.0-flash-v2.txt` in your `.env` when using Gemini as the LLM provider.
+
 > **Tip:** Different LLM models may respond better to different prompt styles. Create a prompt file per model (e.g., `prompts/gemini-2.0-flash.txt`, `prompts/claude-sonnet.txt`) and switch via `SYSTEM_PROMPT_FILE` when changing `LLM_PROVIDER`.
 
 ## Per-User Term Replacements
